@@ -94,17 +94,22 @@ export class AuthService {
             throw new SpocliError("Invalid OAuth callback received.");
           }
 
-          response
-            .writeHead(200, { "content-type": "text/html" })
-            .end("<h1>spocli is connected</h1><p>You can close this browser tab.</p>");
-          server.close();
-          resolve(code);
+          response.writeHead(200, {
+            "content-type": "text/html",
+            connection: "close"
+          });
+          response.end("<h1>spocli is connected</h1><p>You can close this browser tab.</p>", () => {
+            closeCallbackServer(server, () => resolve(code));
+          });
         } catch (error) {
-          response
-            .writeHead(400, { "content-type": "text/html" })
-            .end("<h1>spocli authorization failed</h1><p>Return to your terminal.</p>");
-          server.close();
-          reject(error instanceof Error ? error : new Error(String(error)));
+          const callbackError = error instanceof Error ? error : new Error(String(error));
+          response.writeHead(400, {
+            "content-type": "text/html",
+            connection: "close"
+          });
+          response.end("<h1>spocli authorization failed</h1><p>Return to your terminal.</p>", () => {
+            closeCallbackServer(server, () => reject(callbackError));
+          });
         }
       });
 
@@ -149,6 +154,11 @@ export class AuthService {
       refreshToken: data.refresh_token ?? tokens.refreshToken
     };
   }
+}
+
+function closeCallbackServer(server: http.Server, done: () => void): void {
+  server.closeAllConnections();
+  server.close(() => done());
 }
 
 function mapTokenResponse(response: SpotifyTokenResponse): TokenSet {
